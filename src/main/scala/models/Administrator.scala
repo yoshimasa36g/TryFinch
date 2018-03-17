@@ -7,4 +7,8 @@ final case class Administrator(id: String, password: Password, name: String, ema
 
   def authenticate(id: String, passwordHash: String): Boolean =
     (this.id == id) && password.authenticate(passwordHash)
+
+  def toApiModel: AdministratorApiModel = AdministratorApiModel(id, name, email)
 }
+
+final case class AdministratorApiModel(id: String, name: String, email: String)
