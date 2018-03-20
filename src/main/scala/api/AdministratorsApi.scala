@@ -1,7 +1,6 @@
 package api
 
-import com.twitter.util.Await
-import database.DbContext
+import com.twitter.util.Future
 import io.circe.generic.auto._
 import io.finch._
 import io.finch.circe._
@@ -11,12 +10,10 @@ import repositories.AdministratorsRepository
 import shapeless.{:+:, CNil}
 import values.Password
 
-final class AdministratorsApi(context: DbContext) {
+final class AdministratorsApi(repository: AdministratorsRepository) {
   import io.circe._
   implicit val encode: Encoder[Password] = Encoder[String].contramap(_.value)
   implicit val decode: Decoder[Password] = Decoder[String].map(Password)
-
-  private val repository = new AdministratorsRepository(context)
 
   private val all = get("administrators") {
     repository.all map { administrators =>
@@ -34,9 +31,11 @@ final class AdministratorsApi(context: DbContext) {
   }
 
   private val add = post("administrators" :: jsonBody[Administrator]) { a: Administrator =>
-    Await.result(repository.findBy(a.id)).length match {
-      case 0 => Await.result(repository.add(a).map(_ => Created()))
-      case _ => Conflict(new Exception(s"'${a.id}' is existed."))
+    repository.findBy(a.id) flatMap { targets =>
+      targets.length match {
+        case 0 => repository.add(a).map(_ => Created())
+        case _ => Future { Conflict(new Exception(s"'${a.id}' is existed.")) }
+      }
     }
   }
 
@@ -46,7 +45,7 @@ final class AdministratorsApi(context: DbContext) {
     }
   }
 
-  private val delete = post("administrators" :: path("delete") :: path[String]) { id: String =>
+  private val delete = post("administrators" :: path[String] :: path("delete")) { id: String =>
     repository.delete(id) map { _ =>
       Ok()
     }

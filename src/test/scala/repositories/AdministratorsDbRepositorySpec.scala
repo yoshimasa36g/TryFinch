@@ -6,30 +6,28 @@ import models.Administrator
 import org.scalatest._
 import values.Password
 
-final class AdministratorsRepositorySpec extends FlatSpec with DiagrammedAssertions with BeforeAndAfterAll {
+final class AdministratorsDbRepositorySpec extends FlatSpec with DiagrammedAssertions with BeforeAndAfterAll {
   private val context = DbContext.forTest()
-  private val repository = new AdministratorsRepository(context)
+  private val repository = new AdministratorsDbRepository(context)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    Await.ready(context.executeAction("delete from administrators"))
+    Await.ready(context.executeAction("delete from administrators where id in ('111', '112', '113', 'new')"))
     Await.ready(context.executeAction("insert into administrators values ('111', 'p1', 'test1', 'a@b.c')"))
     Await.ready(context.executeAction("insert into administrators values ('112', 'p2', 'test2', 'b@c.d')"))
     Await.ready(context.executeAction("insert into administrators values ('113', 'p3', 'test3', 'c@d.e')"))
   }
 
   override def afterAll(): Unit = {
-    Await.ready(context.executeAction("delete from administrators"))
+    Await.ready(context.executeAction("delete from administrators where id in ('111', '112', '113', 'new')"))
     context.close()
     super.afterAll()
   }
 
-  "AdministratorsRepository" should "can get all administrators" in {
+  "AdministratorsDbRepository" should "can get all administrators" in {
     val administrators = Await.result(repository.all)
-    val expected = 3
-    val actual = administrators.length
 
-    assert(expected == actual)
+    assert(administrators.length >= 3)
   }
 
   it should "can get specific administrator" in {
