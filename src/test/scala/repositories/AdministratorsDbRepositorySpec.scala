@@ -1,5 +1,7 @@
 package repositories
 
+import java.util.UUID
+
 import com.twitter.util.Await
 import database.DbContext
 import models.Administrator
@@ -24,13 +26,13 @@ final class AdministratorsDbRepositorySpec extends FlatSpec with DiagrammedAsser
     super.afterAll()
   }
 
-  "AdministratorsDbRepository" should "can get all administrators" in {
+  "AdministratorsDbRepository" should "be able to get all administrators" in {
     val administrators = Await.result(repository.all)
 
     assert(administrators.length >= 3)
   }
 
-  it should "can get specific administrator" in {
+  it should "be able to get specific administrator" in {
     val administrators = Await.result(repository.findBy("112"))
     val expectedLength = 1
     val actualLength = administrators.length
@@ -41,7 +43,7 @@ final class AdministratorsDbRepositorySpec extends FlatSpec with DiagrammedAsser
     assert(expected.equals(actual))
   }
 
-  it should "can add administrator" in {
+  it should "be able to add administrator" in {
     val newAdministrator = Administrator("new", Password("pass"), "new-admin", "aaa@example.com")
     val encrypted = newAdministrator.encrypted()
     Await.ready(repository.add(encrypted))
@@ -50,15 +52,31 @@ final class AdministratorsDbRepositorySpec extends FlatSpec with DiagrammedAsser
     assert(encrypted == added)
   }
 
-  it should "can update administrator" in {
-    val updateData = Administrator("113", Password("new-password"), "new-name", "new-email").encrypted()
-    Await.ready(repository.update(updateData))
+  it should "be able to update password" in {
+    val password = Password("new password")
+    Await.ready(repository.updatePassword("113", password))
     val updated = Await.result(repository.all).find(_.id == "113").get
 
-    assert(updateData == updated)
+    assert(password.authenticate(updated.password.value))
   }
 
-  it should "can delete administrator" in {
+  it should "be able to update name" in {
+    val name = "new name"
+    Await.ready(repository.updateName("113", name))
+    val updated = Await.result(repository.all).find(_.id == "113").get
+
+    assert(updated.name == name)
+  }
+
+  it should "be able to update email" in {
+    val email = "new email"
+    Await.ready(repository.updateEmail("113", email))
+    val updated = Await.result(repository.all).find(_.id == "113").get
+
+    assert(updated.email == email)
+  }
+
+  it should "be able to delete administrator" in {
     Await.ready(repository.delete("111"))
     val deleted = Await.result(repository.all).find(_.id == "111")
 

@@ -12,3 +12,9 @@ final case class Password(value: String) extends AnyVal {
 
   def authenticate(passwordHash: String): Boolean = bcrypt().matches(value, passwordHash)
 }
+
+object Password {
+  import io.circe._
+  implicit val encode: Encoder[Password] = Encoder[String].contramap(_.value)
+  implicit val decode: Decoder[Password] = Decoder[String].map(Password(_))
+}

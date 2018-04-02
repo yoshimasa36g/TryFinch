@@ -5,27 +5,39 @@ import io.circe.generic.auto._
 import io.finch._
 import io.finch.circe._
 import io.finch.syntax._
-import models.{Administrator, AdministratorApiModel}
+import models.Administrator
 import repositories.AdministratorsRepository
-import shapeless.{:+:, CNil}
 import values.Password
 
 final class AdministratorsApi(repository: AdministratorsRepository) {
-  import io.circe._
-  implicit val encode: Encoder[Password] = Encoder[String].contramap(_.value)
-  implicit val decode: Decoder[Password] = Decoder[String].map(Password)
 
   private val all = get("administrators") {
     repository.all map { administrators =>
-      Ok(administrators.map(_.toApiModel))
+      Ok(administrators.map(_.dropPassword))
     }
   }
 
-  private val find = get("administrators" :: path[String]) { id: String =>
+  private val getName = get("administrators" :: path[String] :: path("name")) {
+    id: String =>
+      findBy(id).map({
+        case Some(administrator) => Ok(administrator.name)
+        case _ => NotFound(new NoSuchElementException(id))
+      })
+  }
+
+  private val getEmail = get("administrators" :: path[String] :: path("email")) {
+    id: String =>
+      findBy(id).map({
+        case Some(administrator) => Ok(administrator.email)
+        case _ => NotFound(new NoSuchElementException(id))
+      })
+  }
+
+  private def findBy(id: String): Future[Option[Administrator]] = {
     repository.findBy(id) map { a =>
       a.length match {
-        case 0 => NotFound(new Exception(s"'$id' is not found."))
-        case _ => Ok(a.head.toApiModel)
+        case 0 => None
+        case _ => Option(a.head)
       }
     }
   }
@@ -39,19 +51,29 @@ final class AdministratorsApi(repository: AdministratorsRepository) {
     }
   }
 
-  private val update = post("administrators" :: path("update") :: jsonBody[Administrator]) { a: Administrator =>
-    repository.update(a) map { _ =>
-      Ok()
+  private val updatePassword =
+    post("administrators" :: path[String] :: path("password") :: path("update") :: jsonBody[Password]) {
+    (id: String, password: Password) =>
+      repository.updatePassword(id, password.encrypted()).map(_ => Ok())
     }
-  }
+
+  private val updateName =
+    post("administrators" :: path[String] :: path("name") :: path("update") :: jsonBody[String]) {
+      (id: String, name: String) =>
+        repository.updateName(id, name).map(_ => Ok())
+    }
+
+  private val updateEmail =
+    post("administrators" :: path[String] :: path("email") :: path("update") :: jsonBody[String]) {
+      (id: String, email: String) =>
+        repository.updateEmail(id, email).map(_ => Ok())
+    }
 
   private val delete = post("administrators" :: path[String] :: path("delete")) { id: String =>
-    repository.delete(id) map { _ =>
-      Ok()
-    }
+    repository.delete(id).map(_ => Ok())
   }
 
-  val routes: Endpoint[:+:[List[AdministratorApiModel], :+:[AdministratorApiModel, :+:[Unit, :+:[Unit, :+:[Unit, CNil]]]]]] = {
-    all :+: find :+: add :+: update :+: delete
-  }
+  // noinspection TypeAnnotation
+  val routes = all :+: getName :+: getEmail :+:
+    add :+: updatePassword :+: updateName :+: updateEmail :+: delete
 }

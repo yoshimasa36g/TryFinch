@@ -2,60 +2,87 @@ package api
 
 import com.twitter.io.Buf
 import com.twitter.util.{Await, Future}
+import io.circe.generic.auto._
 import io.finch.{Application, Input}
-import models.{Administrator, AdministratorApiModel}
+import io.finch.circe._
+import models.{Administrator, AdministratorWithoutPassword}
 import org.scalatest.{DiagrammedAssertions, FlatSpec}
 import repositories.AdministratorsRepository
+import shapeless.{Inl, Inr}
 import values.Password
 
 final class AdministratorsApiSpec extends FlatSpec with DiagrammedAssertions {
   private val repository = new MockRepository()
   private val api = new AdministratorsApi(repository).routes
 
-  "AdministratorsApi" should "can get all administrators" in {
-    val response = api(Input.get("/administrators")).awaitValueUnsafe()
-    val administrators = response.get.select[List[AdministratorApiModel]].get
+  "AdministratorsApi" should "be able to get all administrators" in {
+    val request = Input.get("/administrators")
+    val response = api(request).awaitValueUnsafe()
+    val administrators = response.get.select[List[AdministratorWithoutPassword]].get
 
     assert(administrators.length == 3)
   }
 
-  it should "can get specific administrator" in {
-    val response = api(Input.get("/administrators/id2")).awaitValueUnsafe()
-    val administrator = response.get.select[AdministratorApiModel].get
+  it should "be able to get specific administrator's name" in {
+    val request = Input.get("/administrators/id2/name")
+    val response = api(request).awaitValueUnsafe().get
+    val name = response.select[String].get
 
-    assert(administrator.id == "id2")
-    assert(administrator.name == "name2")
-    assert(administrator.email == "email2")
+    assert(name == "name2")
   }
 
-  it should "can add new administrator" in {
-    val post = Input.post("/administrators").withBody[Application.Json](Buf.Utf8(
-      "{\"id\":\"new\",\"password\":\"password\",\"name\":\"new admin\",\"email\":\"newadmin@example.com\"}"
-    ))
+  it should "be able to get specific administrator's email" in {
+    val request = Input.get("/administrators/id3/email")
+    val response = api(request).awaitValueUnsafe().get
+    response match {
+      case Inr(Inr(Inl(email))) => assert(email == "email3")
+      case _ => throw new Exception("/administrators/id3/email failed.")
+    }
+  }
+
+  it should "be able to add new administrator" in {
+    val newData = Administrator("new", Password("new password"), "new admin", "new email")
+    val post = Input.post("/administrators").withBody[Application.Json](newData)
     api(post).awaitValueUnsafe()
 
-    val administrators = Await.result(repository.findBy("new"))
+    val administrators = Await.result(repository.findBy(newData.id))
     assert(administrators.length == 1)
-    assert(Password("password").authenticate(administrators.head.password.value))
-    assert(administrators.head.name == "new admin")
-    assert(administrators.head.email == "newadmin@example.com")
+    assert(newData.password.authenticate(administrators.head.password.value))
+    assert(administrators.head.name == newData.name)
+    assert(administrators.head.email == newData.email)
   }
 
-  it should "can update administrator" in {
-    val post = Input.post("/administrators/update").withBody[Application.Json](Buf.Utf8(
-      "{\"id\":\"id3\",\"password\":\"updated password\","
-      + "\"name\":\"updated name\",\"email\":\"updated email\"}"
-    ))
+  it should "be able to update password" in {
+    val post = Input.post("/administrators/id3/password/update")
+      .withBody[Application.Json]("new password")
     api(post).awaitValueUnsafe()
 
     val administrators = Await.result(repository.findBy("id3"))
     assert(administrators.length == 1)
-    assert(Password("updated password").authenticate(administrators.head.password.value))
-    assert(administrators.head.name == "updated name")
-    assert(administrators.head.email == "updated email")
+    assert(Password("new password").authenticate(administrators.head.password.value))
   }
 
-  it should "can delete administrator" in {
+  it should "be able to update name" in {
+    val post = Input.post("/administrators/id3/name/update")
+      .withBody[Application.Json]("new name")
+    api(post).awaitValueUnsafe()
+
+    val administrators = Await.result(repository.findBy("id3"))
+    assert(administrators.length == 1)
+    assert(administrators.head.name == "new name")
+  }
+
+  it should "be able to update email" in {
+    val post = Input.post("/administrators/id3/email/update")
+      .withBody[Application.Json]("new email")
+    api(post).awaitValueUnsafe()
+
+    val administrators = Await.result(repository.findBy("id3"))
+    assert(administrators.length == 1)
+    assert(administrators.head.email == "new email")
+  }
+
+  it should "be able to delete administrator" in {
     val post = Input.post("/administrators/id1/delete")
     api(post).awaitValueUnsafe()
 
@@ -81,8 +108,24 @@ private final class MockRepository extends AdministratorsRepository {
     1
   }
 
-  override def update(administrator: Administrator): Future[Long] = Future {
-    data = data.filter(_.id != administrator.id).union(List(administrator.encrypted()))
+  override def updatePassword(id: String, password: Password): Future[Long] = Future {
+    val target = data.filter(_.id == id).head
+    data = data.filter(_.id != id)
+      .union(List(Administrator(id, password, target.name, target.email)))
+    1
+  }
+
+  override def updateName(id: String, name: String): Future[Long] = Future {
+    val target = data.filter(_.id == id).head
+    data = data.filter(_.id != id)
+      .union(List(Administrator(id, target.password, name, target.email)))
+    1
+  }
+
+  override def updateEmail(id: String, email: String): Future[Long] = Future {
+    val target = data.filter(_.id == id).head
+    data = data.filter(_.id != id)
+      .union(List(Administrator(id, target.password, target.name, email)))
     1
   }
 

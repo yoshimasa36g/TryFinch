@@ -29,9 +29,9 @@ final class AdministratorSpec extends FlatSpec with DiagrammedAssertions {
     assert(administrator.authenticate("id", "$2a$10$ClaRTt6tq4bYZnUaAvT4Ku/Bbt24RbTWwMJWwAYWuOWp/h.fp2NB2"))
   }
 
-  it should "can create api model" in {
+  it should "can drop password" in {
     val administrator = randomAdministrator
-    val apiModel = administrator.toApiModel
+    val apiModel = administrator.dropPassword
 
     assert(apiModel.id == administrator.id)
     assert(apiModel.name == administrator.name)
